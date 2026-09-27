@@ -64,8 +64,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.1.0-supabase >/dev/null 2>&1; then
-            gh release upload v1.1.0-supabase artifacts/*.apk artifacts/CONNECTIVITY.json --clobber
+          if gh release view v1.2.0-ui >/dev/null 2>&1; then
+            gh release upload v1.2.0-ui artifacts/*.apk artifacts/CONNECTIVITY.json --clobber
           else
-            gh release create v1.1.0-supabase artifacts/*.apk artifacts/CONNECTIVITY.json --target "$GITHUB_SHA" --title 'Craftly 1.1 — Supabase متصل مباشرة' --notes-file docs/SUPABASE-RELEASE.md --prerelease
+            gh release create v1.2.0-ui artifacts/*.apk artifacts/CONNECTIVITY.json --target "$GITHUB_SHA" --title 'Craftly 1.2 — Premium mobile redesign' --notes-file docs/REDESIGN-RELEASE.md --prerelease
           fi

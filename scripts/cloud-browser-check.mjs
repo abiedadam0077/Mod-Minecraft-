@@ -34,7 +34,7 @@ try{
   if(p.endsWith('/auth/v1/logout')){signedIn=false;return json({});}
   if(p.endsWith('/auth/v1/signup'))return json({user:user(),session:null});
   if(p.endsWith('/auth/v1/resend'))return json({});
-  if(p.startsWith('/storage/v1/object/public/'))return route.fulfill({contentType:'image/webp',body:fs.readFileSync('public/images/cottage.webp')});
+  if(p.startsWith('/storage/v1/object/public/'))return route.fulfill({contentType:'image/webp',body:fs.readFileSync('public/images/'+(p.includes('sample0')?'overworld':p.includes('sample1')?'dragon':'cottage')+'.webp')});
   if(p.startsWith('/storage/v1/object/sign/')&&method==='POST'){signedRequests++;return json({signedURL:p.replace('/storage/v1','')+'?token=test-signed-token'});}
   if(p.startsWith('/storage/v1/object/sign/')&&method==='GET')return route.fulfill({contentType:'application/octet-stream',body:Buffer.from('504b0506000000000000000000000000000000000000','hex')});
   if(p.startsWith('/storage/v1/object/')){if(method==='POST')uploads++;return json({Key:'test',Id:'test'});}
@@ -67,20 +67,41 @@ try{
  await page.locator('.sidebar button[data-page="discover"]').click();
  await page.locator('[data-favorite]').first().click();await expect(page.locator('[data-favorite]').first()).toHaveAttribute('aria-pressed','true');
  await page.locator('[data-mod]').first().click();await page.locator('[data-rate][data-value="5"]').click();
- await expect(page.locator('.detail-stats')).toContainText('5.0');
- await page.locator('[data-download]').click();await page.locator('.download-success').waitFor();expect(signedRequests).toBe(1);
- await page.locator('[data-action="close"]').first().click();await page.locator('.sidebar [data-page="downloads"]').click();await expect(page.locator('.download-list')).toContainText('Cloud test pack');
- await page.reload();await page.locator('[data-action="upload"]').waitFor(); // session restoration, ?admin=1
- await page.locator('.admin-row [data-delete]').click();await page.locator('[data-confirm-delete]').click();await expect(page.locator('.admin-row')).toHaveCount(0);
- await page.locator('[data-action="account"]').first().click();await page.locator('[data-action="logout"]').click();
- await page.locator('[data-action="admin-login"]').click();await page.locator('[data-action="close"]').click();
+ await expect(page.locator('.detail-heading')).toContainText('5.0');
+ await page.locator('[data-tab="pictures"]').click();await expect(page.locator('.gallery-image')).toBeVisible();
+ await page.locator('[data-tab="changes"]').click();await expect(page.locator('.timeline-entry')).toContainText('Published');
+ await page.locator('[data-download]').click();await expect(page.locator('.transfer-detail>h2')).toHaveText('Completed');expect(signedRequests).toBe(1);
+ await page.locator('.sidebar [data-page="downloads"]').click();await expect(page.locator('.download-list')).toContainText('Cloud test pack');
+ await page.locator('.sidebar [data-page="browse"]').click();
+ await page.locator('#search').fill('does not exist');await expect(page.locator('.mod-card')).toHaveCount(0);
+ await page.locator('#search').fill('Cloud');await expect(page.locator('.mod-card')).toHaveCount(1);
+ await page.locator('.search-filter').click();await page.locator('input[name="rating"][value="5"]').check();await page.locator('#filters-form [type="submit"]').click();await expect(page.locator('.mod-card')).toHaveCount(1);
+ await page.locator('.edition-pill').click();await page.locator('input[name="version"][value="1.20"]').check();await page.locator('#version-form [type="submit"]').click();await expect(page.locator('.mod-card')).toHaveCount(0);
+ await page.locator('.edition-pill').click();await page.locator('input[name="version"][value="all"]').check();await page.locator('#version-form [type="submit"]').click();
+ await page.reload();await page.locator('[data-action="upload"]').waitFor();
+ await page.locator('.admin-row [data-delete]').click();await page.locator('[data-confirm-delete]').click();await expect(page.locator('.admin-row')).toHaveCount(0,{timeout:15000}).catch(async e=>{console.log('DELETE DEBUG',await page.locator('#toast').textContent(),errors);throw e;});
+ await page.locator('.sidebar [data-page="account"]').click();await page.locator('[data-action="logout-confirm"]').click();await page.locator('[data-action="logout"]').click();
  await page.goto('http://127.0.0.1:5199/');
- await page.locator('[data-action="account"]').first().click();await page.locator('[data-action="register"]').click();
+ await page.locator('.topbar [data-page="account"]').click();await page.locator('[data-action="login"]').click();await page.locator('[data-action="register"]').click();
  await page.locator('[name="name"]').fill('New explorer');await page.locator('[name="email"]').fill('new@example.test');await page.locator('[name="password"]').fill('long-test-password');
  await page.locator('#auth-form [type="submit"]').click();await expect(page.locator('.modal')).toContainText('Check your inbox');
  await page.locator('[data-action="close"]').click();
- await page.setViewportSize({width:390,height:844});await page.locator('.topbar [data-action="settings"]').click();await expect(page.locator('.modal')).toContainText('Supabase');await page.locator('[data-action="language"]').last().click();
- expect(await page.locator('html').getAttribute('dir')).toBe('rtl');expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+ // Catalog fixtures are intercepted in this browser only, never uploaded to Supabase.
+ const titles=['Natural Horizons','Dragon Realms','Cozy Cottage Life','Better Adventures'];
+ mods=titles.map((title,i)=>({id:'20000000-0000-4000-8000-00000000000'+i,title,description:['A little upgrade for a whole new world.','Legendary companions. Endless adventures.','A slower pace. A place to call home.','More to discover around every corner.'][i],category:['Textures','Add-ons','Worlds','Add-ons'][i],minecraft_version:'1.21',editor_rating:4.5,cover_path:'sample'+i+'/cover.webp',package_path:'sample'+i+'/pack.mcpack',file_size:8388608,created_at:new Date(Date.now()-i*86400000).toISOString()}));
+ await page.setViewportSize({width:390,height:844});await page.goto('http://127.0.0.1:5199/');await page.locator('.large-card').first().waitFor();
+ expect(await page.locator('.mobile-nav .nav-item').count()).toBe(5);expect(await page.locator('.category-tabs').count()).toBe(0);
+ const screenshot=async name=>{if(process.env.SCREENSHOT_DIR){fs.mkdirSync(process.env.SCREENSHOT_DIR,{recursive:true});await page.locator('img').evaluateAll(imgs=>Promise.all(imgs.filter(i=>i.getBoundingClientRect().top<innerHeight).map(i=>i.decode().catch(()=>{}))));await page.screenshot({path:process.env.SCREENSHOT_DIR+'/'+name+'.png',animations:'disabled'});}};
+ await screenshot('discover');
+ await page.locator('.mobile-nav [data-page="browse"]').click();await screenshot('browse');
+ await page.locator('[data-mod]').first().click();await screenshot('detail');
+ await page.locator('.mobile-nav [data-page="favorites"]').click();await screenshot('favorites');
+ await page.locator('.mobile-nav [data-page="account"]').click();await screenshot('account');
+ await page.locator('[data-action="settings"]').click();await expect(page.locator('.modal')).toContainText('Supabase');await page.locator('[data-action="language"]').last().click();
+ expect(await page.locator('html').getAttribute('dir')).toBe('rtl');
+ for(const target of ['discover','browse','favorites','downloads','account']){await page.locator('.mobile-nav [data-page="'+target+'"]').click();expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);expect(await page.locator('.mobile-nav .active').count()).toBe(1);}
+ await page.locator('.mobile-nav [data-page="browse"]').click();await screenshot('arabic-browse');
+ await page.setViewportSize({width:1440,height:1080});await page.locator('.sidebar button[data-page="discover"]').click();await screenshot('desktop');
  if(errors.length)throw Error(errors.join('\n'));
- console.log('PASS mocked Supabase UI: admin sign-in, upload, favorites, rating, signed download, history, session restore, deletion, logout, email confirmation, mobile and RTL.');
+ console.log('PASS redesigned mobile/desktop UI: admin sign-in, upload, favorites, rating, signed download, history, session restore, deletion, logout, email confirmation, mobile and RTL.');
 }finally{await browser?.close();server.kill();}

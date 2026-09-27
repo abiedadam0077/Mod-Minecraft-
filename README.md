@@ -1,8 +1,8 @@
-# Craftly 1.1 — Supabase-connected Minecraft Bedrock apps
+# Craftly 1.2 — Premium Minecraft Bedrock companion
 
-**[تحميل التطبيقين من GitHub](https://github.com/abiedadam0077/Mod-Minecraft-/releases/tag/v1.1.0-supabase)** · **[طريقة التثبيت والتجربة بالدارجة](docs/SUPABASE-RELEASE.md)**
+**[تحميل التطبيقين من GitHub](https://github.com/abiedadam0077/Mod-Minecraft-/releases/tag/v1.2.0-ui)** · **[طريقة التثبيت والتجربة بالدارجة](docs/REDESIGN-RELEASE.md)**
 
-Craftly (explorer) and Craftly Studio (administrator) now connect **directly to Supabase**. No Render, extra Express server, URL entry or secret key in the APK is needed. The bundled project is configured in `src/cloud-config.js` using only the public URL/publishable key provided by the project owner. The original Express server remains under `server/` for reference/testing; it is not used by the 1.1 frontend or APKs.
+Craftly (explorer) and Craftly Studio (administrator) now connect **directly to Supabase**. No Render, extra Express server, URL entry or secret key in the APK is needed. The bundled project is configured in `src/cloud-config.js` using only the public URL/publishable key provided by the project owner. The original Express server remains under `server/` for reference/testing; it is not used by the 1.2 frontend or APKs.
 
 ## Implemented
 - Responsive iOS-inspired UI, English and Arabic RTL, search/categories/sorting, keyboard-accessible dialogs.
@@ -20,7 +20,7 @@ The catalog starts empty: no fake downloadable packages. An administrator must p
 
 1. Apply [`supabase/migrations/202609270001_craftly.sql`](supabase/migrations/202609270001_craftly.sql) in Supabase SQL Editor.
 2. Create your own account in Supabase Authentication and assign its profile `role='admin'` through SQL Editor as described in [`supabase/README.md`](supabase/README.md). Do not share passwords or service-role keys.
-3. Install the **1.1 Supabase** APKs and sign in. The old 1.0 Express APKs are not compatible.
+3. Install the **1.2** APKs and sign in. The old 1.0 Express APKs are not compatible.
 4. Publish a small real pack in Studio; refresh the explorer catalog in Settings, then download and test import on a device with Minecraft Bedrock.
 
 Auth email confirmation follows the project's dashboard configuration. For public email registration, configure a working Supabase-supported SMTP provider, allowed redirects and suitable email templates. The built-in mail service can restrict recipients/rate. The app explicitly handles accounts awaiting confirmation; it does not disable security settings remotely. When a confirmation link reports a redirect error, verify the account's confirmation status and return to the app to sign in. No dashboard configuration was changed by the agent.
@@ -48,7 +48,7 @@ npm run build:apk
 
 Outputs `artifacts/craftly-explorer.apk` and `artifacts/craftly-studio.apk`. Separate application IDs: `com.craftly.explorer` / `com.craftly.studio`. Android 8+.
 
-GitHub Actions builds/tests the apps, performs read-only remote checks, publishes copies under `releases/` with SHA-256 checksums, and attaches APKs to the **v1.1.0-supabase** prerelease. `CONNECTIVITY.json` records live probe results (catalog, aggregate stats, denied anonymous profile access, Auth configuration), not a successful admin login or a physical-device import test.
+GitHub Actions builds/tests the apps, performs read-only remote checks, publishes copies under `releases/` with SHA-256 checksums, and attaches APKs to the **v1.2.0-ui** prerelease. `CONNECTIVITY.json` records live probe results (catalog, aggregate stats, denied anonymous profile access, Auth configuration), not a successful admin login or a physical-device import test.
 
 These remain **debug-signed test APKs**. A different CI debug signing key may require uninstalling an old build before installation; local settings are lost. Production needs a stable, protected release signing key and device testing. No key/password is committed.
 
@@ -75,3 +75,12 @@ Supabase hosts the data/auth/storage. A separate web frontend, if wanted, can be
 - `server/`, Dockerfile, older setup docs — **legacy Express implementation**, not necessary for current Supabase apps.
 
 Not affiliated with Mojang or Microsoft. Back up worlds before importing packs.
+
+
+## 1.2 redesign and real transfer tracking
+
+See [`docs/REDESIGN-RELEASE.md`](docs/REDESIGN-RELEASE.md) for the mobile design, controls, tests and exact limitations. The UI follows the supplied reference with a shared floating five-tab navigation, compact browsing/search, filter/version sheets, a dedicated account page and tabbed details. Five supported categories and existing Supabase content are preserved without a migration. No fake additional screenshots, update history, Java compatibility or push notifications are generated.
+
+`src/views.js` contains page views, `src/forms.js` preserves auth/admin flows, `src/transfers.js` tracks actual device-local transfers, and `src/main.js` coordinates navigation/actions. Android now exposes pause/resume/cancel/open and scoped storage cleanup. Progress is based on received bytes; cloud download-request history is clearly distinct from local completed files.
+
+Keep the app in the foreground during downloads. Interrupted transfers after process restart are marked interrupted and restart; this is not a background download service. HTTP Range support is handled with a safe restart fallback. Clearing local storage does not delete cloud data or public Downloads copies. Browser files cannot be reopened from disk after reload without the user's own file manager.
