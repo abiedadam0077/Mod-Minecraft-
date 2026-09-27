@@ -1,90 +1,77 @@
-# Craftly — Minecraft Bedrock companion
+# Craftly 1.1 — Supabase-connected Minecraft Bedrock apps
 
-**[تحميل APK من GitHub](https://github.com/abiedadam0077/Mod-Minecraft-/releases/tag/v1.0.0-preview)** · **[دليل التشغيل بالدارجة، خطوة بخطوة](docs/START-HERE-AR.md)**
+**[تحميل التطبيقين من GitHub](https://github.com/abiedadam0077/Mod-Minecraft-/releases/tag/v1.1.0-supabase)** · **[طريقة التثبيت والتجربة بالدارجة](docs/SUPABASE-RELEASE.md)**
 
-جوج تطبيقات مربوطين بنفس السيرفر: **Craftly** للمستخدم و **Craftly Studio** للأدمن. واجهة متجاوبة، تصميم نقي بلون بنفسجي هادئ، دعم العربية RTL والإنجليزية، أيقونات Lucide وأنيميشن يحترم إعداد تقليل الحركة.
+Craftly (explorer) and Craftly Studio (administrator) now connect **directly to Supabase**. No Render, extra Express server, URL entry or secret key in the APK is needed. The bundled project is configured in `src/cloud-config.js` using only the public URL/publishable key provided by the project owner. The original Express server remains under `server/` for reference/testing; it is not used by the 1.1 frontend or APKs.
 
-## What's implemented
-- Search, categories, sorting, details, editor/community ratings.
-- Local guest favorites, synced account favorites, download history.
-- Registration/login, hashed passwords, expiring sessions, logout, server-side admin authorization.
-- Admin uploads: cover, description, Bedrock version, category, editor rating, and real Minecraft package. Publishing is immediately visible in both apps. Delete with confirmation.
-- Two separate Android application IDs: `com.craftly.explorer` / `com.craftly.studio`.
-- Native Android download with size limit, HTTPS, package signature check, Downloads copy (Android 10+), and an explicit **Open in Minecraft** consent dialog. A permission-granting content provider shares the pack with the game. Android 8–9 stores privately and offers Share/save.
-- Admin document picker for cover/package uploads in the Android WebView.
+## Implemented
+- Responsive iOS-inspired UI, English and Arabic RTL, search/categories/sorting, keyboard-accessible dialogs.
+- Supabase Auth sign-in/sign-up, session persistence/refresh, sign-out, email confirmation/resend flow.
+- Database profiles determine admin status; clients cannot assign themselves roles. No embedded administrator credentials.
+- Admin cover/package upload, catalog publishing, deletion and Storage API cleanup. Upload failures attempt compensating cleanup and report orphan UUIDs if cleanup fails.
+- Account favorites, ratings, private per-user download-request history.
+- Private Bedrock files with 10-minute signed URLs; public cover artwork. Cover cap 8 MiB; package cap 50 MiB.
+- Android download only from this Supabase project's signed package endpoint; HTTPS, no redirects, bounded file sizes, ZIP header check, scoped sharing permissions and explicit Open in Minecraft confirmation.
+- The native shell bundles the UI/images. Internet is required for cloud operations.
 
-**The six initial cards are clearly marked design previews.** Their AI-generated art and editorial ratings illustrate the UI; they are not real downloadable mods or fabricated community activity. Upload licensed, game-tested packages in Studio to populate the real catalog. Java `.jar` mods and Java Edition are not supported.
+The catalog starts empty: no fake downloadable packages. An administrator must publish tested, legally distributable content. Java `.jar` mods are not supported. Downloads shown in the UI are **unique account download requests**, not verified transfers or game installations.
 
-## Run locally
-Requires Node.js 22.
+## Owner setup (already guided in this session)
 
-```sh
-npm ci
-cp .env.example .env
-# Edit .env: choose your admin email and a strong unique password.
-node --env-file=.env server/index.js  # API :3001
-npm run dev                        # frontend :5173, proxies API/uploads
-```
+1. Apply [`supabase/migrations/202609270001_craftly.sql`](supabase/migrations/202609270001_craftly.sql) in Supabase SQL Editor.
+2. Create your own account in Supabase Authentication and assign its profile `role='admin'` through SQL Editor as described in [`supabase/README.md`](supabase/README.md). Do not share passwords or service-role keys.
+3. Install the **1.1 Supabase** APKs and sign in. The old 1.0 Express APKs are not compatible.
+4. Publish a small real pack in Studio; refresh the explorer catalog in Settings, then download and test import on a device with Minecraft Bedrock.
 
-Open `/` for the user interface or `/?admin=1` for Studio. Click the profile icon to sign in. Normal registration can never create an admin. The admin environment variables bootstrap one administrator only when no admin exists. Changing them afterward does not reset an existing password.
+Auth email confirmation follows the project's dashboard configuration. For public email registration, configure a working Supabase-supported SMTP provider, allowed redirects and suitable email templates. The built-in mail service can restrict recipients/rate. The app explicitly handles accounts awaiting confirmation; it does not disable security settings remotely. When a confirmation link reports a redirect error, verify the account's confirmation status and return to the app to sign in. No dashboard configuration was changed by the agent.
 
-A local `.env` was generated for this workspace's preview with an administrator account. It is **not committed**. The owner can view it in the private workspace. Do not publish it. If creating a fresh installation, use your own credentials.
-
-```sh
-npm test          # metadata, persistence and isolated end-to-end API tests
-npm run build     # web production build
-node scripts/browser-check.mjs # optional browser checks; requires Chromium OS libraries
-```
-
-## Android / APK build
-Java 17, Android SDK 35 and Gradle 8.9 are required.
+## Local development and tests
 
 ```sh
 npm ci
+npm run dev                # UI :5173; uses Supabase, no local API required
+npm run build              # production static site, also bundled in APK
+npm test                   # legacy API tests + real PostgreSQL/PGlite RLS tests + upload validation
+node scripts/cloud-browser-check.mjs # mocked Supabase browser end-to-end tests; no live account writes
+node scripts/check-cloud.mjs         # read-only real Supabase public checks; network required
+```
+
+The browser test supplies minimal Chromium libraries and starts/stops its own isolated Vite process. It uses mock accounts/storage responses only and never signs into the owner's account. SQL tests exercise PostgreSQL RLS with mocked Supabase `auth`/`storage` schemas; they do not replace testing hosted Storage behavior.
+
+## Android & GitHub releases
+
+Java 17, Gradle 8.9, Android SDK 35:
+
+```sh
 npm run build:apk
 ```
 
-Outputs:
-- `artifacts/craftly-explorer.apk`
-- `artifacts/craftly-studio.apk`
+Outputs `artifacts/craftly-explorer.apk` and `artifacts/craftly-studio.apk`. Separate application IDs: `com.craftly.explorer` / `com.craftly.studio`. Android 8+.
 
-The workflow also publishes downloadable copies under `releases/` on this same session branch, with SHA-256 checksums and the source commit.
+GitHub Actions builds/tests the apps, performs read-only remote checks, publishes copies under `releases/` with SHA-256 checksums, and attaches APKs to the **v1.1.0-supabase** prerelease. `CONNECTIVITY.json` records live probe results (catalog, aggregate stats, denied anonymous profile access, Auth configuration), not a successful admin login or a physical-device import test.
 
-Both are **debug-signed installable test builds**, not Play Store release builds. The GitHub Actions workflow **Build Craftly apps** builds both variants on the session branch. Download `craftly-android-apps` from its successful run. Production distribution needs your own protected release signing key, privacy policy, and device testing.
+These remain **debug-signed test APKs**. A different CI debug signing key may require uninstalling an old build before installation; local settings are lost. Production needs a stable, protected release signing key and device testing. No key/password is committed.
 
-### Connect the apps
-In either APK, open **Settings & help → Server address**, enter your deployed HTTPS origin (e.g. `https://craftly.example.com`), and save. Use the **same address in both apps**. Sign in with the administrator in Studio and register a normal account in Craftly. The APK bundles the UI and images but requires an online server for accounts, publishing and downloads. No expiring sandbox URL is hardcoded.
+## Deployment and limitations
 
-The browser preview's HTTPS origin can be entered for temporary testing while the session server is running, but it is **not permanent hosting**. On mobile the settings are also accessible through the reconnect panel or Account → Settings.
+Supabase hosts the data/auth/storage. A separate web frontend, if wanted, can be hosted as the static contents of `dist/` on a static HTTPS host. GitHub Releases is for APK downloads, not a running web app. No additional database migration is required if the original setup script succeeded.
 
-### Minecraft import
-After downloading, the Android app asks whether to open the file in Minecraft. It hands a content URI to Minecraft Bedrock; **the game controls import and activation**. The app cannot silently write to protected game storage. The user confirms import and enables the pack in their world. Minecraft must be installed and compatible with the package. Back up worlds first. Web browsers require manually opening the downloaded file. This integration needs verification on a real device with Minecraft; it is not claimed as device-tested.
+- Free-plan storage/transfer/idle quotas still apply; this is not unlimited hosting.
+- This client loads up to 1,000 catalog/history records. Larger catalogs require paging and server-side searching.
+- Mod file inspection is a client convenience, not a malware scan or a server-side content validator. Only trusted admins upload. RLS and bucket size/type policies enforce server-side authorization and storage limits.
+- Draft cover artwork is public. Never put confidential material in the public cover bucket.
+- Deleting a mod hides/revokes new catalog-based access; already-issued signed URLs can remain usable until they expire. The app also requests deletion of both objects.
+- Upload/catalog transactions span Storage and Postgres; check reported orphan IDs in the dashboard after outages.
+- Auth expiry during an operation may require sign-in again; network errors are shown, not silently treated as success.
+- No real owner account login, real package publication, or Minecraft device import has been performed by the agent. Validate those on a phone before distribution.
 
-## Production server
-```sh
-npm run build
-NODE_ENV=production node --env-file=.env server/index.js
-# Serves API, uploads and production frontend on PORT (default 3001).
-```
-Or build the included Dockerfile and mount `/data/craftly` as a persistent volume. Put it behind an HTTPS reverse proxy with a request body limit above 108 MB. Set `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and optionally `ALLOWED_ORIGINS` (include `https://appassets.androidplatform.net` for both Android apps).
+## Files
 
-Persistence is a single-process, atomically-written JSON store plus uploaded files in `server/data/` or `DATA_DIR`. Keep this directory backed up. **Do not run multiple server replicas against this file store.** For larger deployments, migrate to a transactional database/object storage and add quotas, email verification/reset, monitoring, malware scanning, and content moderation. Current validation checks file extension, image magic bytes, ZIP header and size; it does not prove that a package is safe or compatible. No paid storage/hosting has been provisioned.
+- `src/cloud.js` — Supabase API adapter, auth/upload/download integration.
+- `src/main.js` / `src/style.css` — shared explorer/studio UI.
+- `supabase/` — schema, grants, RLS, storage policies and owner instructions.
+- `android/` — trusted bundled WebView UI, file picker, native downloader and content provider.
+- `tests/` / `scripts/cloud-browser-check.mjs` — unit, RLS and mocked browser checks.
+- `server/`, Dockerfile, older setup docs — **legacy Express implementation**, not necessary for current Supabase apps.
 
-## Architecture
-- `src/` — Vite responsive UI; Arabic/English, dialogs, keyboard navigation.
-- `server/` — Express API, bcrypt, sessions, admin permissions, rate limits, scoped expiring downloads.
-- `android/` — dependency-light native Java WebView shell, local trusted assets, HTTPS-only network, file picker/downloader/content provider.
-- `tests/` — isolated server integration tests and persistence/validation tests.
-- `.github/workflows/android.yml` — reproducible dual-APK build.
-
-Not affiliated with Mojang or Microsoft. Minecraft is their respective trademark. Only distribute content you own or have permission to share.
-
-## Verification in this workspace
-- `npm test`: passed (validation, atomic persistence, and API integration).
-- Desktop/mobile browser checks: passed for search, favorites, detail/sign-in dialogs, Arabic RTL, and no horizontal overflow or JavaScript exceptions.
-- Admin browser flow: sign in → upload → publish → browser download → delete: passed using a disposable ZIP fixture. This verifies delivery, not Minecraft compatibility.
-- Native APK compilation: verified by GitHub Actions. No emulator or physical-device Minecraft import test was performed.
-
-## Supabase migration (in progress)
-
-The first Supabase schema/RLS/storage migration is available in [`supabase/`](supabase/README.md), with PostgreSQL-based permission tests. It has not been applied to the remote project by this agent. **The released APKs still use the Express backend; running the SQL does not migrate the app or make those APKs Supabase-compatible.** A client/auth/native-download integration and new builds are still required.
+Not affiliated with Mojang or Microsoft. Back up worlds before importing packs.

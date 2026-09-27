@@ -39,11 +39,11 @@ public class MainActivity extends Activity {
  }
  private void callback(boolean success,String message){runOnUiThread(()->{if(!isDestroyed())web.evaluateJavascript("window.craftlyDownloadDone && window.craftlyDownloadDone("+success+","+JSONObject.quote(message)+")",null);});}
  private void fetchMod(String address,String name){File partial=null;HttpURLConnection conn=null;try{
-  URL url=new URL(address);if(!"https".equals(url.getProtocol())||url.getUserInfo()!=null||!url.getPath().matches("/api/download/[a-f0-9]{48}"))throw new IOException("Invalid download URL");
+  URL url=new URL(address);if(!"https".equals(url.getProtocol())||url.getUserInfo()!=null||!"vvypjqmskdtajkeogzmu.supabase.co".equals(url.getHost())||(url.getPort()!=-1&&url.getPort()!=443)||!url.getPath().matches("/storage/v1/object/sign/craftly-packages/[0-9a-f-]{36}/[A-Za-z0-9_-]+[.](mcaddon|mcpack|mcworld)")||url.getQuery()==null||!url.getQuery().contains("token="))throw new IOException("Invalid download URL");
   if(!name.matches("[A-Za-z0-9_-]{1,100}\\.(mcaddon|mcpack|mcworld)"))throw new IOException("Unsupported package");
   File dir=new File(getFilesDir(),"mods");dir.mkdirs();partial=new File(dir,name+".part");File result=new File(dir,name);
   conn=(HttpURLConnection)url.openConnection();conn.setConnectTimeout(20000);conn.setReadTimeout(60000);conn.setInstanceFollowRedirects(false);if(conn.getResponseCode()!=200)throw new IOException("Server returned "+conn.getResponseCode());long total=0;
-  try(InputStream in=conn.getInputStream();OutputStream out=new FileOutputStream(partial)){byte[] buffer=new byte[32768];int n;while((n=in.read(buffer))!=-1){total+=n;if(total>100L*1024*1024)throw new IOException("File exceeds 100 MB");out.write(buffer,0,n);}}
+  try(InputStream in=conn.getInputStream();OutputStream out=new FileOutputStream(partial)){byte[] buffer=new byte[32768];int n;while((n=in.read(buffer))!=-1){total+=n;if(total>50L*1024*1024)throw new IOException("File exceeds 50 MB");out.write(buffer,0,n);}}
   try(InputStream check=new FileInputStream(partial)){if(check.read()!=80||check.read()!=75)throw new IOException("Invalid Minecraft package");}
   if(!partial.renameTo(result))throw new IOException("Could not save file");
   boolean publicSaved=saveToDownloads(result);
