@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-09-27T21:10:45.723Z",
+  "project": "https://vvypjqmskdtajkeogzmu.supabase.co",
+  "checks": [
+    {
+      "name": "catalog",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "name": "rating aggregates",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "name": "private profiles denied to guests",
+      "status": 401,
+      "ok": true
+    },
+    {
+      "name": "auth configuration",
+      "status": 200,
+      "ok": true
+    }
+  ],
+  "note": "Read-only public/API checks. No real admin session or Minecraft-device test."
+}
