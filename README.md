@@ -84,3 +84,7 @@ Not affiliated with Mojang or Microsoft. Minecraft is their respective trademark
 - Desktop/mobile browser checks: passed for search, favorites, detail/sign-in dialogs, Arabic RTL, and no horizontal overflow or JavaScript exceptions.
 - Admin browser flow: sign in → upload → publish → browser download → delete: passed using a disposable ZIP fixture. This verifies delivery, not Minecraft compatibility.
 - Native APK compilation: verified by GitHub Actions. No emulator or physical-device Minecraft import test was performed.
+
+## Supabase migration (in progress)
+
+The first Supabase schema/RLS/storage migration is available in [`supabase/`](supabase/README.md), with PostgreSQL-based permission tests. It has not been applied to the remote project by this agent. **The released APKs still use the Express backend; running the SQL does not migrate the app or make those APKs Supabase-compatible.** A client/auth/native-download integration and new builds are still required.
