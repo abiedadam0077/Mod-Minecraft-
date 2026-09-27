@@ -1,5 +1,7 @@
 # Craftly — Minecraft Bedrock companion
 
+**[تحميل APK من GitHub](https://github.com/abiedadam0077/Mod-Minecraft-/releases/tag/v1.0.0-preview)** · **[دليل التشغيل بالدارجة، خطوة بخطوة](docs/START-HERE-AR.md)**
+
 جوج تطبيقات مربوطين بنفس السيرفر: **Craftly** للمستخدم و **Craftly Studio** للأدمن. واجهة متجاوبة، تصميم نقي بلون بنفسجي هادئ، دعم العربية RTL والإنجليزية، أيقونات Lucide وأنيميشن يحترم إعداد تقليل الحركة.
 
 ## What's implemented
