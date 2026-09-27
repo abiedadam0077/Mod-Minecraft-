@@ -43,6 +43,7 @@ jobs:
           path: artifacts/*
           retention-days: 30
       - name: Publish APKs on the session branch
+        id: package
         env:
           SOURCE_COMMIT: ${{ github.sha }}
         run: |
@@ -60,12 +61,14 @@ jobs:
           git add -f releases/*.apk releases/SHA256SUMS releases/BUILD.txt releases/CONNECTIVITY.json
           git commit -m 'Package Craftly Android test builds [skip ci]'
           git push origin HEAD:arena/01a0e47b-mod-minecraft
+          echo "ready=true" >> "$GITHUB_OUTPUT"
       - name: Publish Supabase APK release
+        if: steps.package.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.2.0-ui >/dev/null 2>&1; then
-            gh release upload v1.2.0-ui artifacts/*.apk artifacts/CONNECTIVITY.json --clobber
+          if gh release view v1.3.0-studio >/dev/null 2>&1; then
+            gh release upload v1.3.0-studio artifacts/*.apk artifacts/CONNECTIVITY.json releases/SHA256SUMS releases/BUILD.txt --clobber
           else
-            gh release create v1.2.0-ui artifacts/*.apk artifacts/CONNECTIVITY.json --target "$GITHUB_SHA" --title 'Craftly 1.2 — Premium mobile redesign' --notes-file docs/REDESIGN-RELEASE.md --prerelease
+            gh release create v1.3.0-studio artifacts/*.apk artifacts/CONNECTIVITY.json releases/SHA256SUMS releases/BUILD.txt --target "$GITHUB_SHA" --title 'Craftly 1.3 — Studio & first-launch experience' --notes-file docs/STUDIO-RELEASE.md --prerelease
           fi

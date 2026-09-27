@@ -25,7 +25,7 @@ public class MainActivity extends Activity {
  private static final String HOST="appassets.androidplatform.net";
  private boolean ar(){return Locale.getDefault().getLanguage().equals("ar");}
  private String tr(String en,String arabic){return ar()?arabic:en;}
- @Override public void onCreate(Bundle saved){super.onCreate(saved);web=new WebView(this);setContentView(web);web.setBackgroundColor(0xfff8f9fc);WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(true);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setSupportZoom(false);s.setMediaPlaybackRequiresUserGesture(true);web.addJavascriptInterface(new Bridge(),"CraftlyNative");
+ @Override public void onCreate(Bundle saved){super.onCreate(saved);web=new WebView(this);setContentView(web);web.setBackgroundColor(0xff100b23);applySystemBars(true);WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setCacheMode(WebSettings.LOAD_DEFAULT);s.setAllowFileAccess(false);s.setAllowContentAccess(true);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setSupportZoom(false);s.setMediaPlaybackRequiresUserGesture(true);web.addJavascriptInterface(new Bridge(),"CraftlyNative");
  web.setWebViewClient(new WebViewClient(){
   @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest req){Uri u=req.getUrl();if(!HOST.equals(u.getHost())||!"https".equals(u.getScheme()))return null;String p=u.getPath();if(p==null||p.equals("/"))p="/index.html";if(p.contains(".."))return new WebResourceResponse("text/plain","UTF-8",403,"Forbidden",null,null);try{String mime=p.endsWith(".js")?"application/javascript":p.endsWith(".css")?"text/css":p.endsWith(".webp")?"image/webp":p.endsWith(".png")?"image/png":p.endsWith(".svg")?"image/svg+xml":"text/html";return new WebResourceResponse(mime,"UTF-8",getAssets().open("public"+p));}catch(IOException e){return new WebResourceResponse("text/plain","UTF-8",404,"Not Found",null,null);}}
   @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){return !HOST.equals(r.getUrl().getHost());}
@@ -42,7 +42,9 @@ public class MainActivity extends Activity {
  private boolean validName(String name){return name!=null&&name.matches("[A-Za-z0-9_-]{1,100}\\.(mcaddon|mcpack|mcworld)");}
  private File modDir(){File dir=new File(getFilesDir(),"mods");dir.mkdirs();return dir;}
  private boolean activeDownloads(){for(Transfer j:transfers.values())if(j.status.equals("running")||j.status.equals("queued")||j.status.equals("paused"))return true;return false;}
+ private void applySystemBars(boolean dark){getWindow().setStatusBarColor(dark?0xff100b23:0xfff7f7fc);getWindow().setNavigationBarColor(dark?0xff100b23:0xffffffff);getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);}
  public class Bridge {
+  @JavascriptInterface public void setDarkAppearance(boolean dark){runOnUiThread(()->{if(!isFinishing()&&!isDestroyed())applySystemBars(dark);});}
   @JavascriptInterface public boolean isAdmin(){return BuildConfig.IS_ADMIN;}
   @JavascriptInterface public void startDownload(String id,String address,String name,boolean resume){
    if(!validName(name)||id==null||!id.matches("[A-Za-z0-9_-]{1,80}"))return;
