@@ -3,6 +3,11 @@ on:
   workflow_dispatch:
   push:
     branches: ['arena/01a0e47b-mod-minecraft']
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'releases/**'
+      - '.github/workflows/publish-release.yml'
 permissions:
   contents: write
 jobs:
