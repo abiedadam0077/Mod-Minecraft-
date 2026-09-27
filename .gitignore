@@ -9,3 +9,5 @@ android/local.properties
 .tooling/
 android/app/src/main/assets/public/
 artifacts/
+
+!releases/*.apk

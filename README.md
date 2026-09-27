@@ -46,6 +46,8 @@ Outputs:
 - `artifacts/craftly-explorer.apk`
 - `artifacts/craftly-studio.apk`
 
+The workflow also publishes downloadable copies under `releases/` on this same session branch, with SHA-256 checksums and the source commit.
+
 Both are **debug-signed installable test builds**, not Play Store release builds. The GitHub Actions workflow **Build Craftly apps** builds both variants on the session branch. Download `craftly-android-apps` from its successful run. Production distribution needs your own protected release signing key, privacy policy, and device testing.
 
 ### Connect the apps
@@ -74,3 +76,9 @@ Persistence is a single-process, atomically-written JSON store plus uploaded fil
 - `.github/workflows/android.yml` — reproducible dual-APK build.
 
 Not affiliated with Mojang or Microsoft. Minecraft is their respective trademark. Only distribute content you own or have permission to share.
+
+## Verification in this workspace
+- `npm test`: passed (validation, atomic persistence, and API integration).
+- Desktop/mobile browser checks: passed for search, favorites, detail/sign-in dialogs, Arabic RTL, and no horizontal overflow or JavaScript exceptions.
+- Admin browser flow: sign in → upload → publish → browser download → delete: passed using a disposable ZIP fixture. This verifies delivery, not Minecraft compatibility.
+- Native APK compilation: verified by GitHub Actions. No emulator or physical-device Minecraft import test was performed.

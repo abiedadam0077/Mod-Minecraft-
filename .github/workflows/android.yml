@@ -4,7 +4,7 @@ on:
   push:
     branches: ['arena/01a0e47b-mod-minecraft']
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -33,3 +33,21 @@ jobs:
           name: craftly-android-apps
           path: artifacts/*.apk
           retention-days: 30
+      - name: Publish APKs on the session branch
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          git fetch origin arena/01a0e47b-mod-minecraft
+          if [ "$(git rev-parse origin/arena/01a0e47b-mod-minecraft)" != "$SOURCE_COMMIT" ]; then
+            echo "A newer source commit exists; keep this run's artifacts only."
+            exit 0
+          fi
+          mkdir -p releases
+          cp artifacts/*.apk releases/
+          (cd releases && sha256sum *.apk > SHA256SUMS)
+          printf 'Debug APKs built from source commit %s by GitHub Actions.\n' "$SOURCE_COMMIT" > releases/BUILD.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f releases/*.apk releases/SHA256SUMS releases/BUILD.txt
+          git commit -m 'Package Craftly Android test builds [skip ci]'
+          git push origin HEAD:arena/01a0e47b-mod-minecraft
