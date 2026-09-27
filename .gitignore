@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+server/data/
+android/.gradle/
+android/**/build/
+android/local.properties
+*.apk
+.tooling/
+android/app/src/main/assets/public/
+artifacts/

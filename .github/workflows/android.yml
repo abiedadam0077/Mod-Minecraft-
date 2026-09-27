@@ -1,0 +1,32 @@
+name: Build Craftly apps
+on:
+  workflow_dispatch:
+  push:
+    branches: ['arena/01a0e47b-mod-minecraft']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: craftly-android-apps
+          path: artifacts/*.apk
+          retention-days: 30
