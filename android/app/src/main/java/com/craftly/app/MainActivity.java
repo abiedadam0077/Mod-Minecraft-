@@ -44,6 +44,8 @@ public class MainActivity extends Activity {
  private boolean activeDownloads(){for(Transfer j:transfers.values())if(j.status.equals("running")||j.status.equals("queued")||j.status.equals("paused"))return true;return false;}
  private void applySystemBars(boolean dark){getWindow().setStatusBarColor(dark?0xff100b23:0xfff7f7fc);getWindow().setNavigationBarColor(dark?0xff100b23:0xffffffff);getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);}
  public class Bridge {
+  @JavascriptInterface public void openExternal(String address){try{Uri uri=Uri.parse(address);String host=uri.getHost();if(!"https".equals(uri.getScheme())||host==null||!host.contains(".")||uri.getUserInfo()!=null||(uri.getPort()!=-1&&uri.getPort()!=443)||host.matches("[0-9.]+")||host.contains(":")||host.endsWith(".local")||host.endsWith(".internal"))return;runOnUiThread(()->{try{startActivity(new Intent(Intent.ACTION_VIEW,uri).addCategory(Intent.CATEGORY_BROWSABLE));}catch(Exception e){Toast.makeText(MainActivity.this,tr("No browser available","لا يوجد متصفح"),Toast.LENGTH_LONG).show();}});}catch(Exception ignored){}}
+
   @JavascriptInterface public void setDarkAppearance(boolean dark){runOnUiThread(()->{if(!isFinishing()&&!isDestroyed())applySystemBars(dark);});}
   @JavascriptInterface public boolean isAdmin(){return BuildConfig.IS_ADMIN;}
   @JavascriptInterface public void startDownload(String id,String address,String name,boolean resume){

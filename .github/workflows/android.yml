@@ -34,9 +34,15 @@ jobs:
       - run: npm test
       - name: Test Supabase client flows with mocked API
         run: node scripts/cloud-browser-check.mjs
+      - name: Test compatibility with existing manual-only schema
+        run: LEGACY_SCHEMA=1 node scripts/cloud-browser-check.mjs
+      - name: Type-check the backend Edge Function
+        run: npx --yes deno check supabase/functions/content-hub/index.ts
       - name: Verify live Supabase public access and RLS
         run: node scripts/check-cloud.mjs
       - run: npm run build:apk
+      - name: Package Android and iOS icon assets
+        run: python3 scripts/package-icons.py
       - uses: actions/upload-artifact@v4
         with:
           name: craftly-android-apps
@@ -67,8 +73,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.3.0-studio >/dev/null 2>&1; then
-            gh release upload v1.3.0-studio artifacts/*.apk artifacts/CONNECTIVITY.json releases/SHA256SUMS releases/BUILD.txt --clobber
+          if gh release view v1.4.0-hub >/dev/null 2>&1; then
+            gh release upload v1.4.0-hub artifacts/*.apk artifacts/craftly-icons.zip artifacts/CONNECTIVITY.json releases/SHA256SUMS releases/BUILD.txt --clobber
           else
-            gh release create v1.3.0-studio artifacts/*.apk artifacts/CONNECTIVITY.json releases/SHA256SUMS releases/BUILD.txt --target "$GITHUB_SHA" --title 'Craftly 1.3 — Studio & first-launch experience' --notes-file docs/STUDIO-RELEASE.md --prerelease
+            gh release create v1.4.0-hub artifacts/*.apk artifacts/craftly-icons.zip artifacts/CONNECTIVITY.json releases/SHA256SUMS releases/BUILD.txt --target "$GITHUB_SHA" --title 'Craftly 1.4 — Hybrid Bedrock Content Hub' --notes-file docs/HUB-RELEASE.md --prerelease
           fi
