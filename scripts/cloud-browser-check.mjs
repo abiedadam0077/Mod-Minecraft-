@@ -19,7 +19,7 @@ try{
  browser=await chromium.launch({executablePath:await bundled.executablePath(),args:bundled.args,headless:true});
  const page=await browser.newPage({viewport:{width:1280,height:900}});const errors=[];
  page.on('pageerror',e=>errors.push(e.message));
- let role='admin',signedIn=false,mods=[],favorites=[],ratings=[],history=[];let uploads=0,signedRequests=0,cleanupRequests=0,catalogReads=0,pagedReads=0,historyReads=0,rejectNextPackage=true;
+ let role='admin',signedIn=false,mods=[],favorites=[],ratings=[],history=[];let releasePackage;let uploads=0,signedRequests=0,cleanupRequests=0,catalogReads=0,pagedReads=0,historyReads=0,rejectNextPackage=true;
  const uid='10000000-0000-4000-8000-000000000001';
  const now=Math.floor(Date.now()/1000);
  const jwt=Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:uid,role:'authenticated',aud:'authenticated',exp:now+3600,iat:now})).toString('base64url')+'.testsignature';
@@ -38,7 +38,7 @@ try{
   if(p.startsWith('/storage/v1/object/public/'))return route.fulfill({contentType:'image/webp',body:fs.readFileSync('public/images/'+(p.includes('sample0')?'overworld':p.includes('sample1')?'dragon':'cottage')+'.webp')});
   if(p.startsWith('/storage/v1/object/sign/')&&method==='POST'){signedRequests++;return json({signedURL:p.replace('/storage/v1','')+'?token=test-signed-token'});}
   if(p.startsWith('/storage/v1/object/sign/')&&method==='GET')return route.fulfill({contentType:'application/octet-stream',body:Buffer.from('504b0506000000000000000000000000000000000000','hex')});
-  if(p.startsWith('/storage/v1/object/')){if(method==='DELETE')cleanupRequests++;if(method==='POST'){uploads++;if(p.includes('craftly-packages')){await new Promise(r=>setTimeout(r,400));if(rejectNextPackage){rejectNextPackage=false;return json({message:'Fixture upload failed. Please retry.',error:'Fixture upload failed',statusCode:'400'},400);}}}return json({Key:'test',Id:'test'});}
+  if(p.startsWith('/storage/v1/object/')){if(method==='DELETE')cleanupRequests++;if(method==='POST'){uploads++;if(p.includes('craftly-packages')){if(rejectNextPackage){await new Promise(resolve=>{const timeout=setTimeout(resolve,20000);releasePackage=()=>{clearTimeout(timeout);resolve();};});rejectNextPackage=false;return json({message:'Fixture upload failed. Please retry.',error:'Fixture upload failed',statusCode:'400'},400);}}}return json({Key:'test',Id:'test'});}
   const table=p.split('/').at(-1),single=req.headers()['accept']?.includes('vnd.pgrst.object');
   const data=method==='GET'?{}:req.postDataJSON()||{};
   if(table==='craftly_catalog_page'){
@@ -84,7 +84,7 @@ try{
  await page.locator('#upload-form [type="submit"]').click();
  await expect(page.locator('#upload-progress')).toContainText('Uploading Minecraft package',{timeout:15000}).catch(async e=>{console.log('UPLOAD STAGE DEBUG',await page.locator('.form-error').allTextContents(),errors,uploads);throw e;});
  await expect(page.locator('#publish-title')).toBeDisabled();
- await page.locator('.publish-header [data-action="close"]').click();await expect(page.locator('#upload-form')).toBeVisible();
+ await page.locator('.publish-header [data-action="close"]').click();await expect(page.locator('#upload-form')).toBeVisible();releasePackage();
  await expect(page.locator('.form-error')).toContainText('Fixture upload failed');
  await expect(page.locator('#publish-title')).toBeEnabled();await expect(page.locator('#publish-title')).toHaveValue('Cloud test pack');expect(cleanupRequests).toBe(1);expect(mods.length).toBe(0);
  await page.locator('#upload-form [type="submit"]').click();
