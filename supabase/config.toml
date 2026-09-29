@@ -1,2 +1,0 @@
-[functions.content-hub]
-verify_jwt = false # Handler explicitly verifies user JWT/admin role OR private cron secret.
