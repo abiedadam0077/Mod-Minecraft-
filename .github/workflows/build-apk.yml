@@ -133,8 +133,9 @@ jobs:
           echo "✅ الـ APK مبني من الكود المعدّل (بدون قيد الحسابات غير الرسمية)."
 
       # ملاحظة: GitHub كيشغّل السكريبت بـ bash -e، كنطفيوه باش نسجلو التقرير ولو فشل أمر
-      - name: تجديد التوقيع (عدة طرق) واختيار الطريقة التي تعطي v1 + v2 + v3
+      - name: التحقق من التوقيع (v1 + v2 + v3) وتجهيز الحزمة
         run: |
+          # ملاحظة: GitHub كيشغّل السكريبت بـ bash -e، كنطفيوه باش نكملو ونسجلو التقرير
           set +e
           set -uo pipefail
           REPORT=report/signature-report.txt
@@ -142,22 +143,13 @@ jobs:
           : > "$REPORT"; : > "$SUMMARY"
           log() { echo "$@" | tee -a "$REPORT"; }
 
-          SRC="$(ls work/*.apk | head -1)"
-          log "== البيئة =="
-          log "ARCH=$ARCH"
-          log "SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           APKSIGNER="$(command -v apksigner || true)"
-          [ -n "$APKSIGNER" ] || APKSIGNER="$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
+          [ -n "$APKSIGNER" ] || APKSIGNER="$(ls -d "$SDK"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
           ZIPALIGN="$(command -v zipalign || true)"
-          [ -n "$ZIPALIGN" ] || ZIPALIGN="$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -1)"
-          log "APKSIGNER=$APKSIGNER (موجود: $([ -x "$APKSIGNER" ] && echo نعم || echo لا))"
-          log "ZIPALIGN=$ZIPALIGN (موجود: $([ -x "$ZIPALIGN" ] && echo نعم || echo لا))"
-          "$APKSIGNER" --version 2>&1 | tee -a "$REPORT"
+          [ -n "$ZIPALIGN" ] || ZIPALIGN="$(ls -d "$SDK"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -1)"
 
-          log ""
-          log "== عدد مدخلات الحزمة =="
-          log "entries=$(unzip -l "$SRC" 2>/dev/null | tail -1 | awk '{print $2}')"
-
+          SRC="$(ls work/*.apk | head -1)"
           PASS="$(grep -E '^default_store_password=' upstream/ZalithLauncher/gradle.properties | cut -d= -f2-)"
           KEYPASS="$(grep -E '^default_key_password=' upstream/ZalithLauncher/gradle.properties | cut -d= -f2-)"
           KS="upstream/ZalithLauncher/zalith_launcher_debug.jks"
@@ -168,86 +160,80 @@ jobs:
             arm)   ABIFLAG="armeabi-v7a" ;;
             *)     ABIFLAG="$ARCH" ;;
           esac
+          OUT="out/ZalithLauncher-${version}-mod-offline-${ABIFLAG}.apk"
+
+          log "== البيئة =="
+          log "ARCH=$ARCH"
+          log "APKSIGNER=$APKSIGNER (موجود: $([ -x "$APKSIGNER" ] && echo نعم || echo لا))"
+          log "ZIPALIGN=$ZIPALIGN (موجود: $([ -x "$ZIPALIGN" ] && echo نعم || echo لا))"
+          log "المصدر: $SRC ($(stat -c%s "$SRC") bytes)"
+          "$APKSIGNER" --version 2>&1 | tee -a "$REPORT"
 
           log ""
-          log "== توقيع الـ APK كما أنتجه Gradle =="
-          "$APKSIGNER" verify --verbose --print-certs "$SRC" 2>&1 | tee -a "$REPORT"
-          log "مدخلات META-INF الموجودة أصلاً:"
-          unzip -l "$SRC" 2>/dev/null | grep -E "META-INF/.*\.(SF|RSA|DSA|EC)" | tee -a "$REPORT"
+          log "== فحص المحاذاة (zipalign) =="
+          "$ZIPALIGN" -c -p -v 4 "$SRC" 2>&1 | tail -3 | tee -a "$REPORT"
+          log "zipalign -c exit=${PIPESTATUS[0]}"
 
-          # ---------- الطرق المرشّحة ----------
-          # الطريقة 1: apksigner مع min-sdk-version أقل من 24 (v1 مطلوب فيها افتراضيًا)
-          # الطريقة 2: apksigner مع --v1-signing-enabled true كما هي
-          # الطريقة 3: jarsigner (توقيع JAR/v1) ثم zipalign ثم apksigner (v2+v3)
-          log ""
-          log "== تجربة الطرق =="
-
-          try_apksigner() {
-            local name="$1"; shift
-            log "--- الطريقة: $name"
-            "$ZIPALIGN" -p -f 4 "$SRC" "cand/aligned-$name.apk" 2>&1 | tee -a "$REPORT"
-            "$APKSIGNER" sign \
-              --ks "$KS" --ks-type PKCS12 --ks-key-alias "$ALIAS" \
-              --ks-pass "pass:$PASS" --key-pass "pass:$KEYPASS" \
-              --out "cand/$name.apk" "$@" "cand/aligned-$name.apk" 2>&1 | tee -a "$REPORT"
-            log "exit=$?"
+          # مهم: apksigner verify كيتخطى فحص توقيع v1 ملي minSdk >= 24،
+          # لهذا كنمررو --min-sdk-version 23 باش يفحص v1 بجدية.
+          verify_report() {
+            local apk="$1"
+            log "--- $(basename "$apk") ($(stat -c%s "$apk") bytes)"
+            log "[1] apksigner verify --min-sdk-version 23"
+            "$APKSIGNER" verify --min-sdk-version 23 --verbose --print-certs "$apk" 2>&1 | tee -a "$REPORT"
+            log "[2] jarsigner -verify (فحص مستقل لتوقيع JAR/v1)"
+            jarsigner -verify "$apk" 2>&1 | tail -6 | tee -a "$REPORT"
           }
 
-          try_jarsigner() {
-            local name="$1"
-            log "--- الطريقة: $name (jarsigner ثم apksigner)"
-            rm -f "cand/raw-$name.apk"
+          log ""
+          log "== فحص الحزمة كما أنتجها Gradle (المفروض v1 + v2 + v3 بعد patch 0002) =="
+          verify_report "$SRC"
+
+          has_v1() {
+            local apk="$1"
+            "$APKSIGNER" verify --min-sdk-version 23 --verbose "$apk" 2>&1 | grep -qE "v1 scheme[^:]*: *true" &&
+            jarsigner -verify "$apk" 2>&1 | grep -qE "jar verified"
+          }
+          has_scheme() {
+            local apk="$1" sch="$2"
+            "$APKSIGNER" verify --min-sdk-version 23 --verbose "$apk" 2>&1 | grep -qE "$sch scheme[^:]*: *true"
+          }
+
+          CHOSEN=""
+          if has_v1 "$SRC" && has_scheme "$SRC" v2 && has_scheme "$SRC" v3; then
+            CHOSEN="$SRC"
+            log ""
+            log "✅ حزمة Gradle موقّعة بـ v1 + v2 + v3 — ما محتاجينش نعاودو التوقيع"
+          else
+            log ""
+            log "⚠️ حزمة Gradle ناقصة شي مخطط توقيع — كنعاودو التوقيع بـ jarsigner (v1) + apksigner (v2/v3)"
+            rm -f cand/raw.apk
             jarsigner -keystore "$KS" -storetype PKCS12 -storepass "$PASS" -keypass "$KEYPASS" \
               -sigalg SHA256withRSA -digestalg SHA-256 \
-              -signedjar "cand/raw-$name.apk" "$SRC" "$ALIAS" 2>&1 | tail -5 | tee -a "$REPORT"
-            log "jarsigner exit=$?"
-            [ -f "cand/raw-$name.apk" ] || { log "لم يُنشأ ملف jarsigner"; return 0; }
-            "$ZIPALIGN" -p -f 4 "cand/raw-$name.apk" "cand/aligned-$name.apk" 2>&1 | tee -a "$REPORT"
+              -signedjar cand/raw.apk "$SRC" "$ALIAS" 2>&1 | tail -5 | tee -a "$REPORT"
+            "$ZIPALIGN" -p -f 4 cand/raw.apk cand/aligned.apk 2>&1 | tee -a "$REPORT"
             "$APKSIGNER" sign \
               --ks "$KS" --ks-type PKCS12 --ks-key-alias "$ALIAS" \
               --ks-pass "pass:$PASS" --key-pass "pass:$KEYPASS" \
+              --min-sdk-version 23 \
               --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
-              --out "cand/$name.apk" "cand/aligned-$name.apk" 2>&1 | tee -a "$REPORT"
-            log "apksigner exit=$?"
-          }
-
-          try_apksigner "A-minsdk23" --min-sdk-version 23 --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true
-          try_apksigner "B-minsdk26" --min-sdk-version 26 --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true
-          try_jarsigner "C-jarsigner"
-
-          log ""
-          log "== تقييم الطرق =="
-          BEST=""
-          for c in cand/A-minsdk23.apk cand/B-minsdk26.apk cand/C-jarsigner.apk; do
-            [ -f "$c" ] || { log "$c: غير موجود"; continue; }
-            OUTV="$("$APKSIGNER" verify --verbose --print-certs "$c" 2>&1)"
-            echo "$OUTV" | tee -a "$REPORT" > /dev/null
-            V1="$(echo "$OUTV" | grep -oE "v1 scheme[^:]*: *(true|false)" | grep -oE "(true|false)" | head -1)"
-            V2="$(echo "$OUTV" | grep -oE "v2 scheme[^:]*: *(true|false)" | grep -oE "(true|false)" | head -1)"
-            V3="$(echo "$OUTV" | grep -oE "v3 scheme[^:]*: *(true|false)" | grep -oE "(true|false)" | head -1)"
-            HAS_SF="$(unzip -l "$c" 2>/dev/null | grep -cE "META-INF/.*\.(SF)$")"
-            log "$c -> v1=${V1:-?} v2=${V2:-?} v3=${V3:-?} (ملفات .SF: $HAS_SF)"
-            if [ "${V1:-false}" = "true" ] && [ "${V2:-false}" = "true" ] && [ "${V3:-false}" = "true" ] && [ "$HAS_SF" -gt 0 ]; then
-              BEST="$c"
-              log "✅ مقبول: $c"
-              break
+              --out cand/resigned.apk cand/aligned.apk 2>&1 | tee -a "$REPORT"
+            verify_report cand/resigned.apk
+            if has_v1 cand/resigned.apk && has_scheme cand/resigned.apk v2 && has_scheme cand/resigned.apk v3; then
+              CHOSEN="cand/resigned.apk"
+              log "✅ التوقيع بعد إعادة التوقيع سليم"
             fi
-          done
+          fi
 
           log ""
-          if [ -n "$BEST" ]; then
-            cp -v "$BEST" "out/ZalithLauncher-${version}-mod-offline-${ABIFLAG}.apk" 2>&1 | tee -a "$REPORT"
-            log "== التحقق النهائي من الملف المعتمد =="
-            "$APKSIGNER" verify --verbose --print-certs "out/ZalithLauncher-${version}-mod-offline-${ABIFLAG}.apk" 2>&1 | tee -a "$REPORT"
-            sha256sum "out/ZalithLauncher-${version}-mod-offline-${ABIFLAG}.apk" 2>&1 | tee -a "$REPORT"
-            {
-              echo "CHOSEN=$BEST"
-              echo "V1=true"
-              echo "V2=true"
-              echo "V3=true"
-            } > "$SUMMARY"
+          if [ -n "$CHOSEN" ]; then
+            cp -f "$CHOSEN" "$OUT"
+            log "== الحزمة النهائية: $OUT =="
+            verify_report "$OUT"
+            sha256sum "$OUT" | tee -a "$REPORT"
+            { echo "CHOSEN=$CHOSEN"; echo "V1=true"; echo "V2=true"; echo "V3=true"; } > "$SUMMARY"
           else
-            log "❌ ما نجحت حتى طريقة ف إنتاج توقيع v1 + v2 + v3"
+            log "❌ ما قدرناش نضمنو توقيع v1 + v2 + v3"
             echo "CHOSEN=none" > "$SUMMARY"
           fi
           log "SIGN_STEP_DONE"
