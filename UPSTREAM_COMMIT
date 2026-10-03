@@ -1,0 +1,9 @@
+# المرجع (commit) الخاص بـ ZalithLauncher2 الذي تم بناء التعديلات عليه
+# النسخة الأصلية: https://github.com/ZalithLauncher/ZalithLauncher2
+#
+# إذا تغيّر هذا المرجع أو تم تحديث المشروع الأصلي، قد لا تنطبق التعديلات (patches)
+# وسيظهر خطأ عند تنفيذ "git apply". في هذه الحالة غيّر القيمة في
+# .github/workflows/build-apk.yml أو هنا ثم أعد المحاولة.
+ZALITHLAUNCHER2_COMMIT=e6cb4f415930c78ce1ecc10062b2bc1026802d4d
+ZALITHLAUNCHER2_VERSION=2.6.1 (launcher_version_name)
+MOD_VERSION=1.0
