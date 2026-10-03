@@ -20,8 +20,9 @@
 | `ZalithLauncher-2.6.1-mod-offline-arm64-v8a.apk` | arm64-v8a (أغلبية الهواتف الحديثة) | ~215 MB |
 | `ZalithLauncher-2.6.1-mod-offline-armeabi-v7a.apk` | armeabi-v7a (الهواتف القديمة 32-bit) | ~200 MB |
 
-الملفات موقّعة بكل المخططات (**v1 + v2 + v3**) و zipalign — يعني كيتثبّتو على MIUI/HyperOS
-وعلى المدراء القدامى (MT Manager وغيرهم) بلا مشكل.
+الملفات موقّعة بكل المخططات (**v1 + v2 + v3**) و مُحاذاة (zipalign) — يعني كيتثبّتو على
+MIUI/HyperOS وعلى المدراء القدامى (MT Manager وغيرهم) بلا مشكل.
+كاين حتى ملف `SHA256SUMS.txt` باش تتأكد أن التحميل كامل.
 
 ---
 
