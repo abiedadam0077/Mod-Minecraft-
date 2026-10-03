@@ -1,0 +1,291 @@
+name: "بناء APK معدّل — Zalith Launcher 2"
+
+# يبني نسخة معدّلة من Zalith Launcher 2 (تشغيل الحسابات غير الرسمية / offline):
+#   1) ينزّل المشروع الأصلي من GitHub
+#   2) يطبّق التعديلات من مجلد patches/
+#   3) يبني الـ APK (debug) لبنيتي المعالج arm64 و arm
+#   4) يتحقق أن التعديل فعلاً داخل الـ APK
+#   5) يجدّد التوقيع بعدة طرق ويختار الطريقة التي تعطي توقيع v1 + v2 + v3 معًا
+#      (أجهزة MIUI/HyperOS وبرامج إدارة الحزم القديمة ترفض الحزم بلا توقيع v1،
+#       وتُظهر رسالة «لم يتم تثبيت التطبيق لأن الحزمة تبدو غير صالحة»)
+#   6) يفشل البناء إذا لم ينجح أي توقيع v1 (باش ما نوزّعوش حزمة ما كتتثبّتش)
+#   7) ينشر النتائج + تقرير فحص مفصّل في صفحة Releases
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: "بنية المعالج"
+        type: choice
+        default: all-selected
+        options:
+          - all-selected
+          - arm64
+          - arm
+          - x86_64
+          - all
+      upstream_ref:
+        description: "نسخة ZalithLauncher2 الأصلية (commit SHA أو فرع)"
+        type: string
+        default: e6cb4f415930c78ce1ecc10062b2bc1026802d4d
+  push:
+    paths:
+      - "patches/**"
+      - ".github/workflows/build-apk.yml"
+      - "UPSTREAM_COMMIT"
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    name: تجهيز المصفوفة
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          set -euo pipefail
+          IN='${{ github.event_name == 'push' && 'all-selected' || inputs.arch }}'
+          case "$IN" in
+            arm64|arm|x86_64|all) JSON="[\"$IN\"]" ;;
+            *) JSON='["arm64","arm"]' ;;
+          esac
+          echo "matrix={\"arch\":$JSON}" >> "$GITHUB_OUTPUT"
+          echo "المصفوفة: $JSON"
+
+  build:
+    name: Build (${{ matrix.arch }})
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+
+    env:
+      ARCH: ${{ matrix.arch }}
+      UPSTREAM_REF: ${{ inputs.upstream_ref || 'e6cb4f415930c78ce1ecc10062b2bc1026802d4d' }}
+
+    steps:
+      - name: تنزيل هذا المستودع (التعديلات)
+        uses: actions/checkout@v6
+
+      - name: تنزيل ZalithLauncher2 الأصلي
+        run: |
+          set -euo pipefail
+          git init -q upstream
+          cd upstream
+          git remote add origin https://github.com/ZalithLauncher/ZalithLauncher2.git
+          git fetch -q --depth 1 origin "$UPSTREAM_REF"
+          git checkout -q FETCH_HEAD
+          echo "ZalithLauncher2 commit: $(git rev-parse HEAD)"
+
+      - name: تطبيق التعديلات (تشغيل الحسابات غير الرسمية)
+        run: |
+          set -euo pipefail
+          cd upstream
+          for p in ../patches/*.patch; do
+            echo "==> applying: $p"
+            git apply -p1 --verbose "$p"
+          done
+          echo "--- التعديلات المطبّقة ---"
+          git --no-pager diff --stat
+
+      - name: تهيئة JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: تهيئة Gradle (مع الكاش)
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: بناء الـ APK
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew "ZalithLauncher:assembleDebug" "-Darch=$ARCH"
+
+      - name: تجميع ملفات الـ APK الناتجة
+        run: |
+          set -euo pipefail
+          mkdir -p work out report cand
+          find upstream/ZalithLauncher/build/outputs/apk/debug -name "*.apk" -exec cp -v {} work/ \;
+          ls -lh work/
+
+      - name: التحقق من أن الـ APK يحتوي فعلاً على التعديل
+        run: |
+          set -euo pipefail
+          APK="$(ls work/*.apk | head -1)"
+          rm -rf dexcheck && mkdir -p dexcheck
+          unzip -o -q "$APK" "classes*.dex" -d dexcheck
+          if strings dexcheck/classes*.dex | grep -q "circumventLimit"; then
+            echo "::error::الـ APK ما زال يحتوي على كود القيد (checkLimit) — التعديل لم يُطبَّق!"
+            exit 1
+          fi
+          if ! strings dexcheck/classes*.dex | grep -q "MOD_ZALITH_OFFLINE_ACCOUNTS"; then
+            echo "::error::علامة التعديل غير موجودة في الـ APK!"
+            exit 1
+          fi
+          echo "✅ الـ APK مبني من الكود المعدّل (بدون قيد الحسابات غير الرسمية)."
+
+      # ملاحظة: GitHub كيشغّل السكريبت بـ bash -e، كنطفيوه باش نسجلو التقرير ولو فشل أمر
+      - name: التحقق من التوقيع (v1 + v2 + v3) وتجهيز الحزمة
+        run: |
+          # ملاحظة: GitHub كيشغّل السكريبت بـ bash -e، كنطفيوه باش نكملو ونسجلو التقرير
+          set +e
+          set -uo pipefail
+          REPORT=report/signature-report.txt
+          SUMMARY=report/summary.txt
+          : > "$REPORT"; : > "$SUMMARY"
+          log() { echo "$@" | tee -a "$REPORT"; }
+
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          APKSIGNER="$(command -v apksigner || true)"
+          [ -n "$APKSIGNER" ] || APKSIGNER="$(ls -d "$SDK"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
+          ZIPALIGN="$(command -v zipalign || true)"
+          [ -n "$ZIPALIGN" ] || ZIPALIGN="$(ls -d "$SDK"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -1)"
+
+          SRC="$(ls work/*.apk | head -1)"
+          PASS="$(grep -E '^default_store_password=' upstream/ZalithLauncher/gradle.properties | cut -d= -f2-)"
+          KEYPASS="$(grep -E '^default_key_password=' upstream/ZalithLauncher/gradle.properties | cut -d= -f2-)"
+          KS="upstream/ZalithLauncher/zalith_launcher_debug.jks"
+          ALIAS="movtery_zalith_debug"
+          version="$(grep -E '^launcher_version_name=' upstream/ZalithLauncher/gradle.properties | cut -d= -f2-)"
+          case "$ARCH" in
+            arm64) ABIFLAG="arm64-v8a" ;;
+            arm)   ABIFLAG="armeabi-v7a" ;;
+            *)     ABIFLAG="$ARCH" ;;
+          esac
+          OUT="out/ZalithLauncher-${version}-mod-offline-${ABIFLAG}.apk"
+
+          log "== البيئة =="
+          log "ARCH=$ARCH"
+          log "APKSIGNER=$APKSIGNER (موجود: $([ -x "$APKSIGNER" ] && echo نعم || echo لا))"
+          log "ZIPALIGN=$ZIPALIGN (موجود: $([ -x "$ZIPALIGN" ] && echo نعم || echo لا))"
+          log "المصدر: $SRC ($(stat -c%s "$SRC") bytes)"
+          "$APKSIGNER" --version 2>&1 | tee -a "$REPORT"
+
+          log ""
+          log "== فحص المحاذاة (zipalign) =="
+          "$ZIPALIGN" -c -p -v 4 "$SRC" 2>&1 | tail -3 | tee -a "$REPORT"
+          log "zipalign -c exit=${PIPESTATUS[0]}"
+
+          # مهم: apksigner verify كيتخطى فحص توقيع v1 ملي minSdk >= 24،
+          # لهذا كنمررو --min-sdk-version 23 باش يفحص v1 بجدية.
+          verify_report() {
+            local apk="$1"
+            log "--- $(basename "$apk") ($(stat -c%s "$apk") bytes)"
+            log "[1] apksigner verify --min-sdk-version 23"
+            "$APKSIGNER" verify --min-sdk-version 23 --verbose --print-certs "$apk" 2>&1 | tee -a "$REPORT"
+            log "[2] jarsigner -verify (فحص مستقل لتوقيع JAR/v1)"
+            jarsigner -verify "$apk" 2>&1 | tail -6 | tee -a "$REPORT"
+          }
+
+          log ""
+          log "== فحص الحزمة كما أنتجها Gradle (المفروض v1 + v2 + v3 بعد patch 0002) =="
+          verify_report "$SRC"
+
+          has_v1() {
+            local apk="$1"
+            "$APKSIGNER" verify --min-sdk-version 23 --verbose "$apk" 2>&1 | grep -qE "v1 scheme[^:]*: *true" &&
+            jarsigner -verify "$apk" 2>&1 | grep -qE "jar verified"
+          }
+          has_scheme() {
+            local apk="$1" sch="$2"
+            "$APKSIGNER" verify --min-sdk-version 23 --verbose "$apk" 2>&1 | grep -qE "$sch scheme[^:]*: *true"
+          }
+
+          CHOSEN=""
+          if has_v1 "$SRC" && has_scheme "$SRC" v2 && has_scheme "$SRC" v3; then
+            CHOSEN="$SRC"
+            log ""
+            log "✅ حزمة Gradle موقّعة بـ v1 + v2 + v3 — ما محتاجينش نعاودو التوقيع"
+          else
+            log ""
+            log "⚠️ حزمة Gradle ناقصة شي مخطط توقيع — كنعاودو التوقيع بـ jarsigner (v1) + apksigner (v2/v3)"
+            rm -f cand/raw.apk
+            jarsigner -keystore "$KS" -storetype PKCS12 -storepass "$PASS" -keypass "$KEYPASS" \
+              -sigalg SHA256withRSA -digestalg SHA-256 \
+              -signedjar cand/raw.apk "$SRC" "$ALIAS" 2>&1 | tail -5 | tee -a "$REPORT"
+            "$ZIPALIGN" -p -f 4 cand/raw.apk cand/aligned.apk 2>&1 | tee -a "$REPORT"
+            "$APKSIGNER" sign \
+              --ks "$KS" --ks-type PKCS12 --ks-key-alias "$ALIAS" \
+              --ks-pass "pass:$PASS" --key-pass "pass:$KEYPASS" \
+              --min-sdk-version 23 \
+              --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+              --out cand/resigned.apk cand/aligned.apk 2>&1 | tee -a "$REPORT"
+            verify_report cand/resigned.apk
+            if has_v1 cand/resigned.apk && has_scheme cand/resigned.apk v2 && has_scheme cand/resigned.apk v3; then
+              CHOSEN="cand/resigned.apk"
+              log "✅ التوقيع بعد إعادة التوقيع سليم"
+            fi
+          fi
+
+          log ""
+          if [ -n "$CHOSEN" ]; then
+            cp -f "$CHOSEN" "$OUT"
+            log "== الحزمة النهائية: $OUT =="
+            verify_report "$OUT"
+            sha256sum "$OUT" | tee -a "$REPORT"
+            { echo "CHOSEN=$CHOSEN"; echo "V1=true"; echo "V2=true"; echo "V3=true"; } > "$SUMMARY"
+          else
+            log "❌ ما قدرناش نضمنو توقيع v1 + v2 + v3"
+            echo "CHOSEN=none" > "$SUMMARY"
+          fi
+          log "SIGN_STEP_DONE"
+
+      - name: نشر تقرير الفحص (دائمًا، للتشخيص)
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="ci-report-$ARCH"
+          { echo "# تقرير فحص توقيع الـ APK ($ARCH)"; echo; echo '```'; cat report/signature-report.txt 2>/dev/null || echo "(لا يوجد تقرير)"; echo '```'; } > report/body.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file report/body.md
+          else
+            gh release create "$TAG" --title "CI report ($ARCH)" --notes-file report/body.md
+          fi
+
+      - name: التأكد من نجاح التوقيع (v1 + v2 + v3)
+        run: |
+          set -euo pipefail
+          cat report/summary.txt
+          grep -q "^V1=true" report/summary.txt
+          grep -q "^V2=true" report/summary.txt
+          grep -q "^V3=true" report/summary.txt
+          ls -lh out/
+          echo "✅ الحزمة موقّعة بـ v1 + v2 + v3 وجاهزة للتثبيت على MIUI/HyperOS."
+
+      - name: رفع الـ APK كـ Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: zalith-offline-${{ matrix.arch }}
+          path: out/*.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: نشر الـ APK في صفحة Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="mod-offline"
+          TITLE="Zalith Launcher 2 — نسخة معدّلة (حسابات غير رسمية)"
+          # ملف البصمات (sha256) للتأكد أن التحميل كامل و سليم
+          (cd out && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          for i in 1 2 3 4 5; do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release upload "$TAG" out/*.apk out/SHA256SUMS.txt --clobber && break
+            else
+              gh release create "$TAG" out/*.apk out/SHA256SUMS.txt --title "$TITLE" --notes-file .github/RELEASE_NOTES.md && break
+            fi
+            sleep 10
+          done
+          gh release view "$TAG" --json assets --jq '.assets[]|"\(.name)  \(.size) bytes"'
