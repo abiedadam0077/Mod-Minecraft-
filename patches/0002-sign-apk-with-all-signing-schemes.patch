@@ -1,0 +1,31 @@
+diff --git a/ZalithLauncher/build.gradle.kts b/ZalithLauncher/build.gradle.kts
+index a219f97..6b0103f 100644
+--- a/ZalithLauncher/build.gradle.kts
++++ b/ZalithLauncher/build.gradle.kts
+@@ -54,12 +54,26 @@ android {
+             storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
+             keyAlias = "movtery_zalith"
+             keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
++            //[MOD] الملفان المرفقان في المشروع هما بصيغة PKCS12 وليس JKS
++            storeType = "PKCS12"
++            //[MOD] تفعيل كل مخططات التوقيع (v1 + v2 + v3)
++            //بدون توقيع v1 ترفض أجهزة MIUI والمديرون القدامى الحزمة وتظهر رسالة «الحزمة تبدو غير صالحة»
++            enableV1Signing = true
++            enableV2Signing = true
++            enableV3Signing = true
+         }
+         create("debugBuild") {
+             storeFile = file("zalith_launcher_debug.jks")
+             storePassword = defaultStorePassword
+             keyAlias = "movtery_zalith_debug"
+             keyPassword = defaultKeyPassword
++            //[MOD] الملفان المرفقان في المشروع هما بصيغة PKCS12 وليس JKS
++            storeType = "PKCS12"
++            //[MOD] تفعيل كل مخططات التوقيع (v1 + v2 + v3)
++            //بدون توقيع v1 ترفض أجهزة MIUI والمديرون القدامى الحزمة وتظهر رسالة «الحزمة تبدو غير صالحة»
++            enableV1Signing = true
++            enableV2Signing = true
++            enableV3Signing = true
+         }
+     }
+ 
