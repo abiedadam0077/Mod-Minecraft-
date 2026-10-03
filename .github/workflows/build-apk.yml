@@ -98,6 +98,25 @@ jobs:
           ls -lh out/
           echo "apk_count=$(ls out/*.apk | wc -l)" >> "$GITHUB_OUTPUT"
 
+      - name: التحقق من أن الـ APK الناتج يحتوي فعلاً على التعديل
+        run: |
+          set -euo pipefail
+          APK="$(ls out/*.apk | head -1)"
+          echo "APK: $APK"
+          rm -rf dexcheck && mkdir -p dexcheck
+          unzip -o -q "$APK" "classes*.dex" -d dexcheck
+          # 1) الكود القديم (قيد الحسابات غير الرسمية) يجب أن يكون غائبًا
+          if strings dexcheck/classes*.dex | grep -q "circumventLimit"; then
+            echo "::error::الـ APK ما زال يحتوي على كود القيد (checkLimit) — التعديل لم يُطبَّق!"
+            exit 1
+          fi
+          # 2) علامة التعديل يجب أن تكون موجودة (إثبات أن الكود المعدّل هو المُصرَّف)
+          if ! strings dexcheck/classes*.dex | grep -q "MOD_ZALITH_OFFLINE_ACCOUNTS"; then
+            echo "::error::علامة التعديل غير موجودة في الـ APK!"
+            exit 1
+          fi
+          echo "✅ تم التحقق: الـ APK مبني من الكود المعدّل (بدون قيد الحسابات غير الرسمية)."
+
       - name: رفع الـ APK كـ Artifact
         uses: actions/upload-artifact@v7
         with:

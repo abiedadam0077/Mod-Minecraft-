@@ -1,5 +1,5 @@
 diff --git a/ZalithLauncher/src/main/java/com/movtery/zalithlauncher/game/account/AccountsManager.kt b/ZalithLauncher/src/main/java/com/movtery/zalithlauncher/game/account/AccountsManager.kt
-index 0e2bf8d..8b8ad2f 100644
+index 0e2bf8d..b328d74 100644
 --- a/ZalithLauncher/src/main/java/com/movtery/zalithlauncher/game/account/AccountsManager.kt
 +++ b/ZalithLauncher/src/main/java/com/movtery/zalithlauncher/game/account/AccountsManager.kt
 @@ -25,10 +25,8 @@ import com.movtery.zalithlauncher.coroutine.TaskSystem
@@ -21,7 +21,7 @@ index 0e2bf8d..8b8ad2f 100644
  import java.util.concurrent.ConcurrentHashMap
  import java.util.concurrent.CopyOnWriteArrayList
  
-@@ -234,21 +231,16 @@ object AccountsManager {
+@@ -234,21 +231,17 @@ object AccountsManager {
      }
  
      /**
@@ -47,6 +47,7 @@ index 0e2bf8d..8b8ad2f 100644
 +        _currentAccountFlow.update { currentAccount }
 +        //[MOD] 永远不进入“非正版锁”状态
 +        _isOffline.update { false }
++        Logger.info(TAG, "MOD_ZALITH_OFFLINE_ACCOUNTS: account restrictions are disabled")
      }
  
      /**
