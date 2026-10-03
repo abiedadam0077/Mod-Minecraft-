@@ -3,8 +3,10 @@ name: "بناء APK معدّل — Zalith Launcher 2"
 # هذا الملف يبني نسخة معدّلة من Zalith Launcher 2 (تشغيل الحسابات غير الرسمية / offline)
 # الطريقة: يُنزّل المشروع الأصلي من GitHub + يُطبّق التعديلات الموجودة في مجلد patches/
 #
-# للتشغيل: تبويب Actions في هذا المستودع > "بناء APK معدّل" > Run workflow
-# ثم انتظر انتهاء البناء وحمّل الـ APK من قسم Artifacts أو من صفحة Releases.
+# طرق التشغيل:
+#   1) أوتوماتيكيًا: عند أي تعديل على patches/ أو على هذا الملف (البنية الافتراضية: arm64)
+#   2) يدويًا: تبويب Actions في المستودع > "بناء APK معدّل" > Run workflow
+# ثم حمّل الـ APK من قسم Artifacts أو من صفحة Releases.
 
 on:
   workflow_dispatch:
@@ -26,21 +28,25 @@ on:
         description: "نشر الـ APK في صفحة Releases لسهولة التحميل من الهاتف؟"
         type: boolean
         default: true
+  push:
+    paths:
+      - "patches/**"
+      - ".github/workflows/build-apk.yml"
+      - "UPSTREAM_COMMIT"
 
 permissions:
   contents: write
 
+env:
+  # القيم الافتراضية عند التشغيل التلقائي (push) — المدخلات اليدوية تتقدّم عليها
+  ARCH: ${{ inputs.arch || 'arm64' }}
+  UPSTREAM_REF: ${{ inputs.upstream_ref || 'e6cb4f415930c78ce1ecc10062b2bc1026802d4d' }}
+
 jobs:
   build:
-    name: Build (${{ inputs.arch }})
+    name: Build (${{ inputs.arch || 'arm64' }})
     runs-on: ubuntu-latest
     timeout-minutes: 180
-
-    env:
-      # مفاتيح اختيارية: إن تركتها فارغة يعمل البناء عادي، لكن تسجيل الدخول بحساب مايكروسوفت الرسمي لن يعمل.
-      # (التعديل موجّه للحسابات غير الرسمية، فلا حاجة إليها)
-      OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
-      CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
 
     steps:
       - name: تنزيل هذا المستودع (التعديلات)
@@ -52,7 +58,7 @@ jobs:
           git init -q upstream
           cd upstream
           git remote add origin https://github.com/ZalithLauncher/ZalithLauncher2.git
-          git fetch -q --depth 1 origin "${{ inputs.upstream_ref }}"
+          git fetch -q --depth 1 origin "$UPSTREAM_REF"
           git checkout -q FETCH_HEAD
           echo "ZalithLauncher2 commit: $(git rev-parse HEAD)"
 
@@ -81,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x gradlew
-          ./gradlew "ZalithLauncher:assembleDebug" "-Darch=${{ inputs.arch }}"
+          ./gradlew "ZalithLauncher:assembleDebug" "-Darch=$ARCH"
 
       - name: تجميع ملفات الـ APK الناتجة
         id: collect
@@ -95,36 +101,22 @@ jobs:
       - name: رفع الـ APK كـ Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: zalith-offline-${{ inputs.arch }}
+          name: zalith-offline-${{ env.ARCH }}
           path: out/*.apk
           if-no-files-found: error
           retention-days: 90
 
       - name: نشر الـ APK في صفحة Releases
-        if: ${{ inputs.publish_release }}
+        if: ${{ github.event_name == 'push' || inputs.publish_release }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="mod-offline-${{ inputs.arch }}"
-          TITLE="Zalith Launcher 2 — نسخة معدّلة (حسابات غير رسمية) [${{ inputs.arch }}]"
-          NOTES=$(cat <<'EOF'
-          نسخة معدّلة من Zalith Launcher 2 تسمح باستخدام الحسابات غير الرسمية (Offline) في كل الدول،
-          بدون الحاجة إلى حساب مايكروسوفت رسمي.
-
-          - التعديل: إزالة القيد الذي كان يمنع الحسابات غير الرسمية خارج الصين.
-          - الأصل: https://github.com/ZalithLauncher/ZalithLauncher2 (GPL-3.0)
-
-          ملاحظة: هذا البناء من نوع debug، لذلك:
-          - يُثبَّت بجانب النسخة الرسمية (معرّف الحزمة ينتهي بـ .debug) ولا يحذف بيانات النسخة الأصلية.
-          - قد تحتاج لتفعيل "تثبيت التطبيقات من مصادر غير معروفة".
-          - تسجيل الدخول بحساب مايكروسوفت الرسمي معطّل في هذا البناء، أما الحسابات المحلية
-            (Offline) وسيرفرات Yggdrasil فتعمل عادي.
-          EOF
-          )
+          TAG="mod-offline-$ARCH"
+          TITLE="Zalith Launcher 2 — نسخة معدّلة (حسابات غير رسمية) [$ARCH]"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" out/*.apk --clobber
             gh release edit "$TAG" --title "$TITLE"
           else
-            gh release create "$TAG" out/*.apk --title "$TITLE" --notes "$NOTES"
+            gh release create "$TAG" out/*.apk --title "$TITLE" --notes-file .github/RELEASE_NOTES.md
           fi
