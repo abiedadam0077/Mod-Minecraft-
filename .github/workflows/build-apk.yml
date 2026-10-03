@@ -135,6 +135,9 @@ jobs:
       # هذا الـ step لا يستعمل "set -e" لكي نتمكن من نشر التقرير حتى عند الفشل
       - name: إعادة التوقيع (v1 + v2 + v3) مع تسجيل كل التفاصيل
         run: |
+          # ملاحظة: GitHub كيشغّل السكريبت بـ bash -e، ولهذا كنطفيو -e هنا
+          # باش نقدرو نكملو ونسجلو التقرير حتى إلا فشل أمر ما
+          set +e
           set -uo pipefail
           REPORT=report/signature-report.txt
           : > "$REPORT"
@@ -154,7 +157,7 @@ jobs:
           log "APKSIGNER=$APKSIGNER  (موجود: $([ -x "$APKSIGNER" ] && echo نعم || echo لا))"
           log "ZIPALIGN=$ZIPALIGN  (موجود: $([ -x "$ZIPALIGN" ] && echo نعم || echo لا))"
           "$APKSIGNER" --version 2>&1 | tee -a "$REPORT"
-          "$ZIPALIGN" -h 2>&1 | head -2 | tee -a "$REPORT"
+          "$ZIPALIGN" 2>&1 | head -3 | tee -a "$REPORT" || true
 
           log ""
           log "== توقيع الـ APK كما أنتجه Gradle =="
