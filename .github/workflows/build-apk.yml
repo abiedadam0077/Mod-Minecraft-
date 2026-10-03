@@ -278,11 +278,13 @@ jobs:
           set -euo pipefail
           TAG="mod-offline"
           TITLE="Zalith Launcher 2 — نسخة معدّلة (حسابات غير رسمية)"
+          # ملف البصمات (sha256) للتأكد أن التحميل كامل و سليم
+          (cd out && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
           for i in 1 2 3 4 5; do
             if gh release view "$TAG" >/dev/null 2>&1; then
-              gh release upload "$TAG" out/*.apk --clobber && break
+              gh release upload "$TAG" out/*.apk out/SHA256SUMS.txt --clobber && break
             else
-              gh release create "$TAG" out/*.apk --title "$TITLE" --notes-file .github/RELEASE_NOTES.md && break
+              gh release create "$TAG" out/*.apk out/SHA256SUMS.txt --title "$TITLE" --notes-file .github/RELEASE_NOTES.md && break
             fi
             sleep 10
           done
