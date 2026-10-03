@@ -7,6 +7,13 @@
 - الأصل: https://github.com/ZalithLauncher/ZalithLauncher2 (GPL-3.0)
 - الكود المصدري لهذه النسخة: هذا المستودع (patches/) + المشروع الأصلي
 
+### الملفات
+
+- `ZalithLauncher-2.6.1-mod-offline-arm64-v8a.apk` ← أغلبية الهواتف الحديثة (64-bit)
+- `ZalithLauncher-2.6.1-mod-offline-armeabi-v7a.apk` ← الهواتف القديمة (32-bit)
+
+كل الملفات موقّعة بـ **v1 + v2 + v3** ومُحاذاة (zipalign) — تثبيت مباشر على MIUI/HyperOS.
+
 ### ملاحظات
 
 - البناء من نوع **debug**: يُثبَّت بجانب النسخة الرسمية (معرّف الحزمة ينتهي بـ `.debug`)
