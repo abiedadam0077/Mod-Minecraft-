@@ -5,10 +5,10 @@ name: "بناء APK معدّل — Zalith Launcher 2"
 #   2) يطبّق التعديلات من مجلد patches/
 #   3) يبني الـ APK (debug) لبنيتي المعالج arm64 و arm
 #   4) يتحقق أن التعديل فعلاً داخل الـ APK
-#   5) يعيد التوقيع بكل المخططات (v1 + v2 + v3) لأن MIUI وبعض الأجهزة ترفض
-#      الحزم التي لا تحتوي توقيع v1 (JAR) وتظهر رسالة «الحزمة تبدو غير صالحة»
-#   6) يتحقق من التوقيع بـ apksigner ويفشل البناء إذا كان التوقيع غير صالح
-#   7) ينشر النتائج في صفحة Releases
+#   5) يعيد التوقيع بكل المخططات (v1 + v2 + v3) لأن MIUI وبعض المديرين يرفضون
+#      الحزم بلا توقيع v1 (JAR) وتظهر رسالة «الحزمة تبدو غير صالحة»
+#   6) يتحقق من التوقيع ويفشل البناء إذا كان ناقصًا
+#   7) ينشر النتائج + تقرير الفحص في صفحة Releases
 
 on:
   workflow_dispatch:
@@ -66,7 +66,6 @@ jobs:
     env:
       ARCH: ${{ matrix.arch }}
       UPSTREAM_REF: ${{ inputs.upstream_ref || 'e6cb4f415930c78ce1ecc10062b2bc1026802d4d' }}
-      # كلمة سر مفتاح التوقيع (نفس القيمة الافتراضية الموجودة في ZalithLauncher/gradle.properties)
       KS_PASS: ${{ secrets.DEBUG_KEY_PASSWORD }}
 
     steps:
@@ -113,7 +112,7 @@ jobs:
       - name: تجميع ملفات الـ APK الناتجة
         run: |
           set -euo pipefail
-          mkdir -p work out
+          mkdir -p work out report
           find upstream/ZalithLauncher/build/outputs/apk/debug -name "*.apk" -exec cp -v {} work/ \;
           ls -lh work/
 
@@ -133,34 +132,45 @@ jobs:
           fi
           echo "✅ الـ APK مبني من الكود المعدّل (بدون قيد الحسابات غير الرسمية)."
 
-      - name: إعادة التوقيع بكل المخططات (v1 + v2 + v3)
+      # هذا الـ step لا يستعمل "set -e" لكي نتمكن من نشر التقرير حتى عند الفشل
+      - name: إعادة التوقيع (v1 + v2 + v3) مع تسجيل كل التفاصيل
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          REPORT=report/signature-report.txt
+          : > "$REPORT"
+          log() { echo "$@" | tee -a "$REPORT"; }
+
           SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           BT="$(ls -d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -1 || true)"
           APKSIGNER="$(command -v apksigner || true)"
-          ZIPALIGN="$(command -v zipalign || true)"
           [ -n "$APKSIGNER" ] || APKSIGNER="$BT/apksigner"
+          ZIPALIGN="$(command -v zipalign || true)"
           [ -n "$ZIPALIGN" ] || ZIPALIGN="$BT/zipalign"
-          echo "apksigner: $APKSIGNER"
-          "$APKSIGNER" --version || true
 
-          # كلمة سر مفتاح التصحيح: من الأسرار إن وُجدت، وإلا القيمة الافتراضية في المشروع
-          PASS="${KS_PASS}"
-          if [ -z "$PASS" ]; then
-            PASS="$(grep -E '^default_store_password=' upstream/ZalithLauncher/gradle.properties | cut -d= -f2-)"
-            KEYPASS="$(grep -E '^default_key_password=' upstream/ZalithLauncher/gradle.properties | cut -d= -f2-)"
-          else
-            KEYPASS="$PASS"
-          fi
+          log "== البيئة =="
+          log "ARCH=$ARCH"
+          log "SDK=$SDK"
+          log "BUILD_TOOLS=$BT"
+          log "APKSIGNER=$APKSIGNER  (موجود: $([ -x "$APKSIGNER" ] && echo نعم || echo لا))"
+          log "ZIPALIGN=$ZIPALIGN  (موجود: $([ -x "$ZIPALIGN" ] && echo نعم || echo لا))"
+          "$APKSIGNER" --version 2>&1 | tee -a "$REPORT"
+          "$ZIPALIGN" -h 2>&1 | head -2 | tee -a "$REPORT"
 
-          mkdir -p report
-          # تشخيص: ماذا أنتج Gradle أصلاً؟
+          log ""
+          log "== توقيع الـ APK كما أنتجه Gradle =="
           for apk in work/*.apk; do
-            echo "=== فحص توقيع APK من Gradle: $(basename "$apk") ===" | tee -a report/signature-report.txt
-            "$APKSIGNER" verify --verbose --print-certs "$apk" 2>&1 | tee -a report/signature-report.txt || true
+            log "--- $(basename "$apk")  ($(stat -c%s "$apk") bytes)"
+            "$APKSIGNER" verify --verbose --print-certs "$apk" 2>&1 | tee -a "$REPORT" || true
           done
 
+          if [ -n "${KS_PASS:-}" ]; then
+            PASS="$KS_PASS"; KEYPASS="$KS_PASS"
+            log "كلمة السر: من أسرار المستودع (DEBUG_KEY_PASSWORD)"
+          else
+            PASS="$(grep -E '^default_store_password=' upstream/ZalithLauncher/gradle.properties | cut -d= -f2-)"
+            KEYPASS="$(grep -E '^default_key_password=' upstream/ZalithLauncher/gradle.properties | cut -d= -f2-)"
+            log "كلمة السر: القيمة الافتراضية من ZalithLauncher/gradle.properties"
+          fi
           version="$(grep -E '^launcher_version_name=' upstream/ZalithLauncher/gradle.properties | cut -d= -f2-)"
           case "$ARCH" in
             arm64) ABIFLAG="arm64-v8a" ;;
@@ -168,9 +178,14 @@ jobs:
             *)     ABIFLAG="$ARCH" ;;
           esac
 
+          log ""
+          log "== إعادة التوقيع (zipalign + apksigner) =="
           for apk in work/*.apk; do
             aligned="work/aligned-$(basename "$apk")"
-            "$ZIPALIGN" -p -f 4 "$apk" "$aligned" 2>/dev/null || "$ZIPALIGN" -f 4 "$apk" "$aligned"
+            { "$ZIPALIGN" -p -f 4 "$apk" "$aligned" || "$ZIPALIGN" -f 4 "$apk" "$aligned"; } 2>&1 | tee -a "$REPORT"
+            zrc=${PIPESTATUS[0]}
+            log "zipalign exit=$zrc"
+            OUT="out/ZalithLauncher-${version}-mod-offline-${ABIFLAG}.apk"
             "$APKSIGNER" sign \
               --ks upstream/ZalithLauncher/zalith_launcher_debug.jks \
               --ks-type PKCS12 \
@@ -181,24 +196,62 @@ jobs:
               --v2-signing-enabled true \
               --v3-signing-enabled true \
               --min-sdk-version 26 \
-              --out "out/ZalithLauncher-${version}-mod-offline-${ABIFLAG}.apk" \
-              "$aligned"
+              --out "$OUT" "$aligned" 2>&1 | tee -a "$REPORT"
+            log "apksigner sign exit=${PIPESTATUS[0]} -> $OUT"
           done
-          ls -lh out/
 
-          echo "=== فحص توقيع الملف النهائي ===" | tee -a report/signature-report.txt
-          if ! "$APKSIGNER" verify --verbose --print-certs out/*.apk 2>&1 | tee -a report/signature-report.txt; then
-            echo "::error::فشل التحقق من توقيع الـ APK النهائي!"
-            exit 1
+          log ""
+          log "== التحقق النهائي من الملفات الموقّعة =="
+          for apk in out/*.apk; do
+            log "--- $(basename "$apk")  ($(stat -c%s "$apk") bytes)"
+            "$APKSIGNER" verify --verbose --print-certs "$apk" 2>&1 | tee -a "$REPORT" || true
+            log "مدخلات META-INF (توقيع v1):"
+            unzip -l "$apk" 2>&1 | grep -E "META-INF/" | tee -a "$REPORT" || true
+            sha256sum "$apk" 2>&1 | tee -a "$REPORT"
+          done
+          echo "SIGN_STEP_DONE" >> "$REPORT"
+
+      - name: نشر تقرير الفحص (دائمًا، للتشخيص)
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="ci-report-$ARCH"
+          { echo "# تقرير فحص توقيع الـ APK ($ARCH)"; echo; echo '```'; cat report/signature-report.txt 2>/dev/null || echo "(لا يوجد تقرير)"; echo '```'; } > report/body.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file report/body.md
+          else
+            gh release create "$TAG" --title "CI report ($ARCH)" --notes-file report/body.md
           fi
+
+      - name: التحقق من التوقيع (v1 + v2 + v3)
+        run: |
+          set -euo pipefail
+          R=report/signature-report.txt
+          # نفحص قسم التحقق النهائي فقط
+          awk '/== التحقق النهائي من الملفات الموقّعة ==/{f=1} f' "$R" > report/final.txt
+          echo "--- قسم التحقق النهائي ---"
+          cat report/final.txt
+          fail=0
           for s in v1 v2 v3; do
-            if ! grep -qE "Verified using $s scheme.*true" report/signature-report.txt; then
+            if grep -qiE "$s scheme[^:]*: *true" report/final.txt; then
+              echo "✅ $s: مفعّل"
+            else
               echo "::error::مخطط التوقيع $s غير مُفعّل في الـ APK النهائي!"
-              exit 1
+              fail=1
             fi
           done
-          echo "✅ التوقيع سليم: v1 + v2 + v3 مُفعّلة."
-          sha256sum out/*.apk | tee -a report/signature-report.txt
+          # توقيع v1 معناه وجود ملفات META-INF/*.SF
+          if grep -qE "META-INF/.*\.(SF|RSA|DSA|EC)" report/final.txt; then
+            echo "✅ توقيع v1 (JAR) موجود داخل الحزمة"
+          else
+            echo "::error::لا توجد ملفات توقيع JAR (META-INF/*.SF) — MIUI سيرفض الحزمة!"
+            fail=1
+          fi
+          [ "$fail" -eq 0 ] || exit 1
+          echo "✅ التوقيع سليم: v1 + v2 + v3"
 
       - name: رفع الـ APK كـ Artifact
         uses: actions/upload-artifact@v7
@@ -224,23 +277,3 @@ jobs:
             sleep 10
           done
           gh release view "$TAG" --json assets --jq '.assets[]|"\(.name)  \(.size) bytes"'
-
-      - name: نشر تقرير الفحص (للتشخيص)
-        if: ${{ matrix.arch == 'arm64' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="ci-report"
-          {
-            echo "تقرير فحص توقيع الـ APK — $(date -u '+%Y-%m-%d %H:%M UTC')"
-            echo
-            echo '```'
-            cat report/signature-report.txt
-            echo '```'
-          } > report/body.md
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --notes-file report/body.md
-          else
-            gh release create "$TAG" --title "CI report" --notes-file report/body.md
-          fi
